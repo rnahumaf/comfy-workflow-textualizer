@@ -39,6 +39,7 @@ export interface ParserOptions {
   preferTitles: boolean;
   fullChains: boolean;
   ignoreUnconnected: boolean;
+  llmFormat: boolean;
 }
 
 export function parseWorkflow(workflow: ComfyWorkflow, options: ParserOptions): string {
@@ -132,6 +133,25 @@ export function parseWorkflow(workflow: ComfyWorkflow, options: ParserOptions): 
       return 'Nenhuma conexão ativa encontrada no workflow.';
     }
     return workflow.nodes.map(n => getNodeName(n.id)).join('\n');
+  }
+
+  // Se o formato LLM estiver ativo, gerar no formato de pares simplificados "Origem.saída -> Destino.entrada"
+  if (options.llmFormat) {
+    const lines = edges.map(edge => {
+      const fromName = getNodeName(edge.fromNodeId);
+      const toName = getNodeName(edge.toNodeId);
+      return `${fromName}.${edge.fromSlotName} -> ${toName}.${edge.toSlotName}`;
+    });
+
+    if (!options.ignoreUnconnected) {
+      workflow.nodes.forEach(node => {
+        if (!connectedNodeIds.has(node.id)) {
+          lines.push(getNodeName(node.id));
+        }
+      });
+    }
+
+    return lines.join('\n');
   }
 
   // 3. Organizar conexões para busca rápida de adjacências

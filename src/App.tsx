@@ -26,7 +26,8 @@ export default function App() {
 
   const [rawJson, setRawJson] = useState('');
   const [options, setOptions] = useState<ParserOptions>({
-    includeNodeIds: true,
+    llmFormat: true,
+    includeNodeIds: false,
     preferTitles: true,
     fullChains: true,
     ignoreUnconnected: true,
@@ -140,12 +141,54 @@ export default function App() {
     if (!output) return null;
     
     return output.split('\n').map((line, idx) => {
-      // Procurar por padrões e envolver em spans com classes específicas
-      // e.g. "Load Image (IMAGE) -> (pixels) VAE Encode"
+      // Se estiver no formato LLM, a linha tem a forma "Origem.saida -> Destino.entrada"
+      if (options.llmFormat) {
+        const arrowRegex = /(\s*->\s*)/g;
+        const parts: React.ReactNode[] = [];
+        let lastIndex = 0;
+        let match;
+        let partKey = 0;
+
+        while ((match = arrowRegex.exec(line)) !== null) {
+          const nodeConnectorStr = line.substring(lastIndex, match.index);
+          
+          // Dividir nodeConnectorStr por '.' (o último ponto)
+          const dotIdx = nodeConnectorStr.lastIndexOf('.');
+          if (dotIdx !== -1) {
+            const node = nodeConnectorStr.substring(0, dotIdx);
+            const slot = nodeConnectorStr.substring(dotIdx + 1);
+            parts.push(<span key={partKey++} className="node-name">{node}</span>);
+            parts.push(<span key={partKey++} className="dot" style={{ opacity: 0.5 }}>.</span>);
+            parts.push(<span key={partKey++} className="connector" style={{ fontWeight: 500 }}>{slot}</span>);
+          } else {
+            parts.push(<span key={partKey++} className="node-name">{nodeConnectorStr}</span>);
+          }
+
+          parts.push(<span key={partKey++} className="arrow"> {match[0]} </span>);
+          lastIndex = arrowRegex.lastIndex;
+        }
+
+        const remainingStr = line.substring(lastIndex);
+        const dotIdx = remainingStr.lastIndexOf('.');
+        if (dotIdx !== -1) {
+          const node = remainingStr.substring(0, dotIdx);
+          const slot = remainingStr.substring(dotIdx + 1);
+          parts.push(<span key={partKey++} className="node-name">{node}</span>);
+          parts.push(<span key={partKey++} className="dot" style={{ opacity: 0.5 }}>.</span>);
+          parts.push(<span key={partKey++} className="connector" style={{ fontWeight: 500 }}>{slot}</span>);
+        } else {
+          parts.push(<span key={partKey++} className="node-name">{remainingStr}</span>);
+        }
+
+        return (
+          <span key={idx} className="chain-line">
+            {parts}
+          </span>
+        );
+      }
+
+      // Caso contrário, usa o formato anterior de cadeias
       const parts: React.ReactNode[] = [];
-      
-      // Regex para encontrar " -> " e " (conector) "
-      // Vamos parsear a linha dividindo pelos conectores e setas
       const regex = /(\s*->\s*)|(\([^)]+\))/g;
       let lastIndex = 0;
       let match;
@@ -233,6 +276,14 @@ export default function App() {
               <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Sliders size={12} /> OPÇÕES:
               </span>
+              <label className="option-checkbox" title="Formato simplificado amigável para LLMs (Origem.saída -> Destino.entrada)">
+                <input 
+                  type="checkbox" 
+                  checked={options.llmFormat} 
+                  onChange={() => handleOptionChange('llmFormat')} 
+                />
+                Formato LLM
+              </label>
               <label className="option-checkbox">
                 <input 
                   type="checkbox" 
@@ -249,10 +300,15 @@ export default function App() {
                 />
                 Incluir IDs dos Nós
               </label>
-              <label className="option-checkbox" title="Cria conexões completas desde as fontes originais">
+              <label 
+                className="option-checkbox" 
+                title="Cria conexões completas desde as fontes originais (apenas para modo Cadeias)"
+                style={{ opacity: options.llmFormat ? 0.5 : 1, cursor: options.llmFormat ? 'not-allowed' : 'pointer' }}
+              >
                 <input 
                   type="checkbox" 
                   checked={options.fullChains} 
+                  disabled={options.llmFormat}
                   onChange={() => handleOptionChange('fullChains')} 
                 />
                 Cadeias Completas
